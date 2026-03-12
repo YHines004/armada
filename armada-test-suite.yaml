@@ -1,0 +1,163 @@
+name: Armada Workload Suite
+
+on:
+  push:
+    branches:
+      - dev/testsuite
+  workflow_dispatch:
+    inputs:
+      queue:
+        description: Armada queue to target
+        required: true
+        default: dev
+        type: string
+      armada_server:
+        description: Armada scheduler endpoint
+        required: true
+        default: armada-scheduler.dev.tectonic.alcps.co
+        type: string
+      timeout_seconds:
+        description: Per-workload timeout in seconds
+        required: true
+        default: "600"
+        type: string
+      smoke_sleep_seconds:
+        description: Smoke workload runtime in seconds
+        required: true
+        default: "90"
+        type: string
+      gang_sleep_seconds:
+        description: Gang workload runtime in seconds
+        required: true
+        default: "120"
+        type: string
+      priority_baseline_sleep_seconds:
+        description: Priority baseline workload runtime in seconds
+        required: true
+        default: "180"
+        type: string
+      priority_probe_sleep_seconds:
+        description: Priority probe workload runtime in seconds
+        required: true
+        default: "90"
+        type: string
+      failing_pre_exit_sleep_seconds:
+        description: Time to keep the failing workload alive before it exits non-zero
+        required: true
+        default: "60"
+        type: string
+      dry_run:
+        description: Render and validate workload manifests without submitting them
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test-suite:
+    name: Run Armada Workload Suite
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      AWS_REGION: "us-east-2"
+      OIDC_ROLE: ${{ secrets.OIDC_ROLE }}
+      EKS_CLUSTER_NAME: tectonic-dev-cluster
+      ARMADA_SERVER: ${{ secrets.ARMADA_SERVER }}
+      SUITE_QUEUE: ${{ inputs.queue }}
+      SUITE_TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
+      SMOKE_SLEEP_SECONDS: ${{ inputs.smoke_sleep_seconds }}
+      GANG_SLEEP_SECONDS: ${{ inputs.gang_sleep_seconds }}
+      PRIORITY_BASELINE_SLEEP_SECONDS: ${{ inputs.priority_baseline_sleep_seconds }}
+      PRIORITY_PROBE_SLEEP_SECONDS: ${{ inputs.priority_probe_sleep_seconds }}
+      FAILING_PRE_EXIT_SLEEP_SECONDS: ${{ inputs.failing_pre_exit_sleep_seconds }}
+
+    steps:
+      - uses: actions/create-github-app-token@a1cbe0fa3c5aa6b13e7437f226536549d68ed0dd # v2.1.0
+        id: generate_token
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - run: git config --global url."https://git:${GH_TOKEN}@github.com".insteadOf "https://github.com"
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.8"
+
+      - name: Install armadactl
+        run: |
+          git clone --depth 1 --branch v0.20.33 https://github.com/armadaproject/armada /tmp/armada
+          cd /tmp/armada
+          go build -o "$HOME/go/bin/armadactl" ./cmd/armadactl
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ env.OIDC_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions
+
+      - name: Configure kubectl
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
+
+      - name: Run workload suite
+        working-directory: environments/dev/applications/armada/workload-suite
+        run: |
+          args=()
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          bash run_workload_suite.sh "${args[@]}"
+
+# Note: The test suite consists of multiple Kubernetes Job manifests that validate different aspects of the Armada dev environment, such as gang scheduling, priority/fairshare, basic scheduling, and error handling. Each job is designed to be simple and self-contained for easy debugging and validation.
+# PR validation and scheduled runs will help catch regressions and ensure the Armada environment is functioning correctly. Customize the jobs as needed for your specific cluster configuration and testing needs.
+# name: Armada Test Suite
+# on:
+#   pull_request:        # Runs when a PR is raised
+#     types: [opened, synchronize, reopened]
+#   schedule:
+#     - cron: "0 0 * * *" # daily at midnight UTC
+#   workflow_dispatch:
+#
+# permissions:
+#   id-token: write
+#
+# jobs:
+#   test-suite:
+#     name: Run Armada Dev Test Suite
+#     runs-on: ubuntu-latest
+#     environment: dev
+#     env:
+#       AWS_REGION: "us-east-2"
+#       OIDC_ROLE: ${{ secrets.OIDC_ROLE }}
+#       EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+#
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v5
+#
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+#         with:
+#           role-to-assume: ${{ env.OIDC_ROLE }}
+#           aws-region: ${{ env.AWS_REGION }}
+#           role-session-name: GitHubActions
+#
+#       - name: Configure kubectl
+#         run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
+#
+#       - name: Run test suite
+#         working-directory: environments/dev/applications/armada/test-suite
+#         run: bash run_workload_suite.sh
