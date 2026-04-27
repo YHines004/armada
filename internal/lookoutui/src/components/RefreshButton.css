@@ -1,6 +1,10 @@
 .refresh {
-  min-width: 50px;
   display: flex;
-  justify-content: center;
   align-items: center;
+  gap: 4px;
+}
+
+.refresh-time {
+  white-space: nowrap;
+  color: rgba(0, 0, 0, 0.6);
 }
