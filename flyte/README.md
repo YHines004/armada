@@ -55,7 +55,7 @@ The top three workarounds the connector carries in Wave 1, analogous to the Airf
 
 ## c) The prioritized list of which Phase 1 to 5 upstream API improvements would simplify the connector the most
 
-1. Stateless_ `GetJobStatus(job_id)` poll - eliminates the entire cursor/event-drain loop and `last_message_id` field from `ResourceMeta`; the single biggest complexity reduction available
+1. Stateless `GetJobStatus(job_id)` poll endpoint - eliminates the entire cursor/event-drain loop and `last_message_id` field from `ResourceMeta`; the single biggest complexity reduction available
 2. Native Cause -> Flyte phase hint on terminal events - would eliminate the hand-rolled failure classification table in the connector currently owns and maintains
 3. `TaskRefreshIndicator` /poll-hint signal from connector back to Propeller would let the connector signal urgency (e.g. on `Preempted`) rather than waiting for the next reconciler resync
 4. First-class `externalJobUri` on status/event responses removes need to carry and pass it manually through `ResourceMeta`
