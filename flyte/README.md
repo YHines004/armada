@@ -41,11 +41,11 @@ The top three workarounds the connector carries in Wave 1, analogous to the Airf
 
     - Analogous to Airflow's retry wrappers. Flyte's retry model is retryability-first (`USER/SYSTEM`, `RECOVERABLE/NON_RECOVERABLE`) and has no native cause-enum ingestion. The connector must own and maintain the full translation table with no upstream help:
 
-    | Flyte Classification            | Retry?                | failure_category           | failure_subcategory.       |
+    | Flyte Classification            | Retry?                | failure_category           | failure_subcategory        |
     |---------------------------------|-----------------------|----------------------------|----------------------------|
     | SYSTEM, RECOVERABLE             | Yes, if policy allows | infrastructure or resource | oom                        |
     | SYSTEM or USER, NON_RECOVERABLE | Usually no            | system or policy           | deadline_exceeded          |
-    | SYSTEM, RECOVERABLE             | Yes.                  | infrastructure             | preempted                  |
+    | SYSTEM, RECOVERABLE             | Yes                   | infrastructure             | preempted                  |
     | USER, NON_RECOVERABLE           | No                    | user or platform           | rejected/admission_rejected|
 
 3. Silent carry of `external_job_uri` and `job_set_id` through ResourceMeta
